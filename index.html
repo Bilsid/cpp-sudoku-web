@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nextcloud Sudoku</title>
+    <style>
+        /* --- CSS STYLES --- */
+        body { font-family: sans-serif; text-align: center; background: #f0f0f0; user-select: none; }
+
+        /* CONTROL PANEL LAYOUT */
+        .controls-container {
+            width: fit-content;
+            margin: 0 auto 15px auto;
+            display: flex;
+            gap: 10px;
+            align-items: flex-end; /* Aligns bottoms of buttons */
+        }
+
+        /* STYLING FOR ALL BUTTONS */
+        .btn {
+            padding: 8px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 1px solid #999;
+            border-radius: 4px;
+            background: #e0e0e0;
+            height: 50px; /* Force same height */
+            min-width: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .btn:hover { background: #d0d0d0; }
+        .btn:active { background: #ccc; }
+
+        /* Specific Button Colors */
+        .btn-new { background: #0082c9; color: white; border: none; }
+        .btn-new:hover { background: #006fb0; }
+
+        .btn-note.active {
+            background: #ccffcc; border-color: #006400; color: #006400; font-weight: bold;
+        }
+
+        .btn-hint { background: #ffd700; border: 1px solid #cfaa00; }
+        .btn-hint:hover { background: #ffcc00; }
+
+        /* Fine print text inside buttons */
+        .fine-print {
+            font-size: 10px;
+            margin-top: 2px;
+            font-weight: normal;
+            opacity: 0.8;
+        }
+
+        /* DROPDOWN */
+        select { padding: 8px; font-size: 16px; height: 50px; border-radius: 4px; border: 1px solid #999;}
+
+        /* THE GRID */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(9, 44px);
+            width: fit-content; margin: 20px auto;
+            background: black; gap: 1px; border: 3px solid black;
+        }
+
+        /* CELL WRAPPER */
+        .cell-wrapper {
+            background: white; display: grid; grid-template-areas: "stack";
+            width: 44px; height: 44px; box-sizing: border-box; position: relative;
+        }
+        /* Highlight selected box (Blue) */
+        .cell-wrapper.selected { background-color: #e6f2ff !important; }
+
+        .thick-right { border-right: 2px solid black !important; }
+        .thick-bottom { border-bottom: 2px solid black !important; }
+
+        /* LAYER 1: INPUT */
+        .cell-input {
+            grid-area: stack; width: 100%; height: 100%;
+            border: none; outline: none; background: transparent;
+            text-align: center; font-size: 24px; color: black;
+            z-index: 2; cursor: default; margin: 0;
+        }
+        .cell-input.conflict { color: red !important; font-weight: bold; }
+
+        /* LAYER 2: NOTES */
+        .note-grid {
+            grid-area: stack; width: 100%; height: 100%;
+            display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+            pointer-events: none; z-index: 1;
+        }
+        .note-num {
+            font-size: 10px; color: #008000; font-weight: bold;
+            display: flex; justify-content: center; align-items: center; visibility: hidden;
+        }
+
+        /* PRE-FILLED & HINT STYLES */
+        .cell-wrapper.prefilled { background-color: #d0d0d0; }
+        .cell-input.prefilled { font-weight: bold; }
+
+        /* Valid Group Green */
+        .valid-group { background-color: #ccffcc !important; }
+
+        .has-value .note-grid { visibility: hidden; }
+
+    </style>
+</head>
+<body>
+
+    <h1>C++ Sudoku Engine</h1>
+
+    <div class="controls-container">
+        <select id="diff-select">
+            <option value="1">Easy</option>
+            <option value="2">Medium</option>
+            <option value="3">Hard</option>
+            <option value="4">Expert</option>
+        </select>
+
+        <button class="btn btn-new" onclick="newGame()">
+            Start
+        </button>
+
+        <button id="noteBtn" class="btn btn-note" onclick="toggleNoteMode()">
+            Notes
+            <span class="fine-print">(Press g)</span>
+        </button>
+
+        <button class="btn btn-hint" onclick="getHint()">
+            Hint
+            <span class="fine-print">Get Answer</span>
+        </button>
+    </div>
+
+    <div style="font-size: 12px; color: #666; margin-bottom: 5px;">
+        (Press 'x' to clear notes in a box)
+    </div>
+
+    <div id="board" class="grid"></div>
+
+    <script>
+        // GLOBAL VARIABLES
+        let isNoteMode = false;
+        let currentSolution = ""; // Stores the answer key
+        let selectedCellIndex = -1; // Tracks which box you clicked last
+
+        function toggleNoteMode() {
+            isNoteMode = !isNoteMode;
+            const btn = document.getElementById('noteBtn');
+            if (isNoteMode) btn.classList.add('active');
+            else btn.classList.remove('active');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'g' || e.key === 'G') {
+                if (e.target.tagName === 'INPUT') e.preventDefault();
+                toggleNoteMode();
+            }
+        });
+
+        function newGame() {
+            let level = document.getElementById('diff-select').value;
+            fetch('api.php?level=' + level)
+                .then(response => response.text())
+                .then(data => {
+                    // C++ now returns "PUZZLE SOLUTION" separated by a space
+                    let parts = data.trim().split(" ");
+                    let puzzle = parts[0];
+                    currentSolution = parts[1]; // Save the answer key
+
+                    selectedCellIndex = -1; // Reset selection
+                    drawBoard(puzzle);
+                });
+        }
+
+        // --- NEW HINT FUNCTION ---
+        function getHint() {
+            if (selectedCellIndex === -1) {
+                alert("Please click on a box first to get a hint!");
+                return;
+            }
+
+            // Check if it's already filled
+            let inputs = document.querySelectorAll('.cell-input');
+            if (inputs[selectedCellIndex].value !== "") return; // Already done
+
+            // Get the correct answer from our secret variable
+            let correctChar = currentSolution[selectedCellIndex];
+
+            // Fill it in
+            let input = inputs[selectedCellIndex];
+            let wrapper = document.querySelectorAll('.cell-wrapper')[selectedCellIndex];
+
+            input.value = correctChar;
+            wrapper.classList.add('has-value');
+
+            // Optional: You could add a specific color for hints if you want
+            // wrapper.style.backgroundColor = "#fffacd";
+
+            checkBoard(); // Run logic check
+        }
+
+        function drawBoard(boardString) {
+            const boardDiv = document.getElementById('board');
+            boardDiv.innerHTML = '';
+
+            for (let i = 0; i < 81; i++) {
+                let wrapper = document.createElement('div');
+                wrapper.className = 'cell-wrapper';
+                let col = i % 9; let row = Math.floor(i / 9);
+                if (col === 2 || col === 5) wrapper.classList.add('thick-right');
+                if (row === 2 || row === 5) wrapper.classList.add('thick-bottom');
+
+                let input = document.createElement('input');
+                input.className = 'cell-input';
+                input.maxLength = 1;
+
+                // Track selection when user clicks a box
+                input.onfocus = () => {
+                    // Remove old selection highlights
+                    document.querySelectorAll('.cell-wrapper').forEach(w => w.classList.remove('selected'));
+                    // Add new highlight
+                    wrapper.classList.add('selected');
+                    selectedCellIndex = i;
+                };
+
+                let noteGrid = document.createElement('div');
+                noteGrid.className = 'note-grid';
+                for(let n=1; n<=9; n++) {
+                    let note = document.createElement('span');
+                    note.className = 'note-num note-' + n;
+                    note.innerText = n;
+                    noteGrid.appendChild(note);
+                }
+
+                let val = boardString[i];
+                if (val !== '0') {
+                    input.value = val; input.readOnly = true;
+                    input.classList.add('prefilled'); wrapper.classList.add('prefilled');
+                    wrapper.classList.add('has-value');
+                } else {
+                    input.onkeydown = (e) => handleInput(e, input, wrapper);
+                    input.oninput = () => checkBoard();
+                }
+
+                wrapper.appendChild(input); wrapper.appendChild(noteGrid);
+                boardDiv.appendChild(wrapper);
+            }
+        }
+
+        function handleInput(e, input, wrapper) {
+            if (e.key === 'x' || e.key === 'X') {
+                e.preventDefault();
+                wrapper.querySelectorAll('.note-num').forEach(n => n.style.visibility = 'hidden');
+                return;
+            }
+            if (e.key === 'g' || e.key === 'G') { e.preventDefault(); return; }
+
+            if (e.key >= '1' && e.key <= '9') {
+                if (isNoteMode) {
+                    e.preventDefault();
+                    let note = wrapper.querySelector('.note-' + e.key);
+                    note.style.visibility = (note.style.visibility === 'visible') ? 'hidden' : 'visible';
+                } else {
+                    wrapper.classList.add('has-value');
+                }
+            }
+
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+                if (!isNoteMode) {
+                    setTimeout(() => {
+                        if(input.value === '') {
+                             wrapper.classList.remove('has-value');
+                             checkBoard();
+                        }
+                    }, 10);
+                }
+            }
+        }
+
+        function checkBoard() {
+            let inputs = document.querySelectorAll('.cell-input');
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+
+            wrappers.forEach(w => w.classList.remove('valid-group'));
+            inputs.forEach(i => i.classList.remove('conflict'));
+
+            const getVal = (idx) => inputs[idx].value;
+
+            const analyzeGroup = (indices) => {
+                let values = indices.map(idx => getVal(idx));
+                let counts = {};
+                indices.forEach(idx => {
+                    let val = getVal(idx);
+                    if(val !== "") {
+                        if(!counts[val]) counts[val] = [];
+                        counts[val].push(idx);
+                    }
+                });
+                for (let num in counts) {
+                    if (counts[num].length > 1) {
+                        counts[num].forEach(idx => inputs[idx].classList.add('conflict'));
+                    }
+                }
+                let unique = new Set(values);
+                if (!values.includes("") && unique.size === 9) {
+                    indices.forEach(idx => wrappers[idx].classList.add('valid-group'));
+                }
+            };
+
+            for (let r = 0; r < 9; r++) {
+                let indices = [];
+                for (let c = 0; c < 9; c++) indices.push(r*9 + c);
+                analyzeGroup(indices);
+            }
+            for (let c = 0; c < 9; c++) {
+                let indices = [];
+                for (let r = 0; r < 9; r++) indices.push(r*9 + c);
+                analyzeGroup(indices);
+            }
+            for (let br = 0; br < 9; br+=3) {
+                for (let bc = 0; bc < 9; bc+=3) {
+                    let indices = [];
+                    for (let i=0; i<3; i++) for(let j=0; j<3; j++) indices.push((br+i)*9 + (bc+j));
+                    analyzeGroup(indices);
+                }
+            }
+        }
+
+        function toggleNoteMode() {
+            isNoteMode = !isNoteMode;
+            const btn = document.getElementById('noteBtn');
+
+            // 1. Change the visual style
+            if (isNoteMode) btn.classList.add('active');
+            else btn.classList.remove('active');
+
+            // 2. THE FIX: If we have a selected box, force the browser to focus on it again
+            if (selectedCellIndex !== -1) {
+                let inputs = document.querySelectorAll('.cell-input');
+                inputs[selectedCellIndex].focus();
+            }
+        }
+
+        newGame();
+    </script>
+</body>
+</html>
