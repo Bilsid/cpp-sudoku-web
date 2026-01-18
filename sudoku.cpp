@@ -1,120 +1,173 @@
 #include <iostream>
-#include <vector>
 #include <algorithm>
-#include <random>
-#include <chrono>
-#include <cstdlib>
+#include <vector>
+#include <random>   // NEW: Required for modern shuffling
+#include <cstring>  // For memcpy
 
 using namespace std;
 
-const int N = 9;
-const int EMPTY = 0;
+// --- GLOBAL RANDOM ENGINE ---
+// We create one shared random generator for the whole program
+// This prevents "re-seeding" issues and makes it faster.
+std::random_device rd;
+std::mt19937 rng(rd());
 
-void printBoard(const vector<vector<int>>& board) {
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            cout << board[i][j];
-        }
-    }
-}
+// --- CORE FUNCTIONS ---
 
-bool isValid(const vector<vector<int>>& board, int row, int col, int num) {
-    for (int i = 0; i < N; ++i) {
-        if (board[row][i] == num || board[i][col] == num) return false;
+// Check if placing num at board[index] is valid
+bool isSafe(int board[], int index, int num) {
+    int row = index / 9;
+    int col = index % 9;
+
+    // Check Row
+    for (int i = 0; i < 9; i++) {
+        if (board[row * 9 + i] == num) return false;
     }
+
+    // Check Column
+    for (int i = 0; i < 9; i++) {
+        if (board[i * 9 + col] == num) return false;
+    }
+
+    // Check 3x3 Box
     int startRow = row - row % 3;
     int startCol = col - col % 3;
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            if (board[i + startRow][j + startCol] == num) return false;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (board[(startRow + i) * 9 + (startCol + j)] == num) return false;
         }
     }
+
     return true;
 }
 
-bool solveSudoku(vector<vector<int>>& board) {
-    for (int row = 0; row < N; ++row) {
-        for (int col = 0; col < N; ++col) {
-            if (board[row][col] == EMPTY) {
-                for (int num = 1; num <= 9; ++num) {
-                    if (isValid(board, row, col, num)) {
-                        board[row][col] = num;
-                        if (solveSudoku(board)) return true;
-                        board[row][col] = EMPTY;
-                    }
-                }
-                return false;
-            }
+// Generate a full valid board
+bool solveBoard(int board[]) {
+    int index = -1;
+    for (int i = 0; i < 81; i++) {
+        if (board[i] == 0) {
+            index = i;
+            break;
         }
     }
-    return true;
+
+    if (index == -1) return true; // No empty spots left = Solved
+
+    // Randomize numbers 1-9 for variety
+    vector<int> nums = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+    // NEW: Modern Shuffle
+    shuffle(nums.begin(), nums.end(), rng);
+
+    for (int num : nums) {
+        if (isSafe(board, index, num)) {
+            board[index] = num;
+            if (solveBoard(board)) return true;
+            board[index] = 0; // Backtrack
+        }
+    }
+    return false;
 }
 
-void fillDiagonal(vector<vector<int>>& board) {
-    for (int i = 0; i < N; i += 3) {
-        vector<int> nums = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-        shuffle(nums.begin(), nums.end(), default_random_engine(seed));
-        int idx = 0;
-        for (int r = 0; r < 3; ++r) {
-            for (int c = 0; c < 3; ++c) {
-                board[i + r][i + c] = nums[idx++];
-            }
+// --- UNIQUENESS CHECKER ---
+
+// Modified solver that counts how many solutions exist
+void countSolutions(int board[], int &count) {
+    if (count > 1) return; // Optimization: Stop if we already found 2 solutions
+
+    int index = -1;
+    for (int i = 0; i < 81; i++) {
+        if (board[i] == 0) {
+            index = i;
+            break;
+        }
+    }
+
+    if (index == -1) {
+        count++; // Found a solution
+        return;
+    }
+
+    for (int num = 1; num <= 9; num++) {
+        if (isSafe(board, index, num)) {
+            board[index] = num;
+            countSolutions(board, count);
+            board[index] = 0; // Backtrack
         }
     }
 }
 
-void removeDigits(vector<vector<int>>& board, int holes) {
-    int count = holes;
-    while (count > 0) {
-        int cellId = rand() % (N * N);
-        int i = cellId / N;
-        int j = cellId % N;
-        if (board[i][j] != EMPTY) {
-            board[i][j] = EMPTY;
-            count--;
-        }
+// Wrapper to check if board is unique
+bool isUnique(int board[]) {
+    int copyBoard[81];
+    // Make a copy because the solver modifies the board
+    memcpy(copyBoard, board, 81 * sizeof(int));
+
+    int count = 0;
+    countSolutions(copyBoard, count);
+    return (count == 1);
+}
+
+// --- MAIN GAME LOGIC ---
+
+void generatePuzzle(int board[], int holes) {
+    // 1. Create a full solution first
+    fill(board, board + 81, 0);
+    solveBoard(board);
+
+    // 2. Poke Holes
+    vector<int> positions;
+    for (int i = 0; i < 81; i++) positions.push_back(i);
+
+    // NEW: Modern Shuffle
+    shuffle(positions.begin(), positions.end(), rng);
+
+    for (int i = 0; i < holes; i++) {
+        board[positions[i]] = 0;
     }
 }
 
 int main(int argc, char* argv[]) {
-    srand(time(0));
-    vector<vector<int>> board(N, vector<int>(N, EMPTY));
-    fillDiagonal(board);
-    solveSudoku(board);
+    // No need for srand(time(0)) anymore!
 
-    // Save the full solution
-    vector<vector<int>> solution = board;
-
-    // Difficulty Logic (The New Update)
-    int level = 3; // Default to Hard
+    int holes = 30; // Default
     if (argc > 1) {
-        level = atoi(argv[1]);
+        string arg = argv[1];
+        if (arg == "1") holes = 30;       // Easy
+        else if (arg == "2") holes = 40;  // Medium
+        else if (arg == "3") holes = 50;  // Hard
+        else if (arg == "4") holes = 58;  // Expert
+        else holes = atoi(argv[1]);       // Custom
     }
 
-    int holes;
-    if (level > 10) {
-        // Custom Mode: If input is > 10, use it as the exact hole count
-        holes = level;
-        // Cap it safely between 10 (Too Easy) and 64 (Insane)
-        if (holes > 64) holes = 64;
-        if (holes < 10) holes = 10;
-    } else {
-        // Standard Modes
-        switch (level) {
-            case 1: holes = 30; break; // Easy
-            case 2: holes = 40; break; // Medium
-            case 3: holes = 50; break; // Hard
-            case 4: holes = 58; break; // Expert
-            default: holes = 50;
+    // Safety clamp (Don't remove ALL numbers, or loop runs forever)
+    if (holes > 64) holes = 64;
+
+    int board[81];
+    int solution[81];
+    int attempts = 0;
+    bool uniqueFound = false;
+
+    // --- THE MAGIC LOOP ---
+    // Keep generating until we find one with EXACTLY 1 solution
+    while (!uniqueFound && attempts < 1000) {
+        attempts++;
+
+        generatePuzzle(board, holes);
+
+        if (isUnique(board)) {
+            uniqueFound = true;
         }
     }
 
-    removeDigits(board, holes);
+    // Solve the unique board one last time to get the "Answer Key" string
+    memcpy(solution, board, 81 * sizeof(int));
+    solveBoard(solution);
 
-    printBoard(board);
-    cout << " "; // Separator
-    printBoard(solution);
+    // Output: PUZZLE_STRING SOLUTION_STRING
+    for (int i = 0; i < 81; i++) cout << board[i];
+    cout << " "; // Space separator
+    for (int i = 0; i < 81; i++) cout << solution[i];
 
     return 0;
 }
