@@ -1,209 +1,624 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Nextcloud Sudoku</title>
     <style>
-        /* --- CSS STYLES --- */
+        /* --- CSS VARIABLES --- */
+        :root {
+            --cell-size: 44px;
+            --font-size: 24px;
+            --note-size: 10px;
+            --board-gap: 1px;
+            --panel-width: 160px;
+            --btn-padding: 15px;
+            --btn-font: 20px;
+
+            /* DEFAULT COLORS (Blue Theme) */
+            /* You can change these defaults here, but the Color Picker overrides them */
+            --highlight-related: #cce5ff;
+            --highlight-selected: #80bfff;
+            --note-color: #008000;
+        }
+
         body { font-family: sans-serif; text-align: center; background: #f0f0f0; user-select: none; }
 
-        /* CONTROL PANEL LAYOUT */
-        .controls-container {
-            width: fit-content;
-            margin: 0 auto 15px auto;
-            display: flex;
-            gap: 10px;
-            align-items: flex-end; /* Aligns bottoms of buttons */
+        .top-controls {
+            width: fit-content; margin: 0 auto 15px auto;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            justify-content: center; position: relative;
         }
 
-        /* STYLING FOR ALL BUTTONS */
-        .btn {
-            padding: 8px 15px;
-            font-size: 16px;
-            cursor: pointer;
-            border: 1px solid #999;
-            border-radius: 4px;
-            background: #e0e0e0;
-            height: 50px; /* Force same height */
+        /* SETTINGS PANEL */
+        .settings-btn {
+            background: none; border: none; font-size: 24px; cursor: pointer; padding: 0 10px;
+        }
+        .settings-dropdown {
+            display: none;
+            position: absolute; top: 50px; right: 0;
+            background: white; border: 1px solid #999; border-radius: 4px;
+            padding: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 50; text-align: left; width: 220px;
+        }
+        .settings-row {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px; font-size: 14px;
+        }
+        input[type="color"] {
+            cursor: pointer; border: none; width: 40px; height: 30px; padding: 0; background: none;
+        }
+
+        /* --- Custom Inputs --- */
+        .custom-holes-input {
+            width: 50px; padding: 8px; font-size: 16px;
+            border-radius: 4px; border: 1px solid #999;
+            display: none;
+        }
+
+        .timer-container { display: flex; align-items: center; gap: 5px; }
+        .timer-display {
+            font-size: 24px; font-weight: bold; color: #333;
+            background: white; padding: 5px 15px; border-radius: 4px; border: 1px solid #ccc;
             min-width: 80px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
         }
-        .btn:hover { background: #d0d0d0; }
-        .btn:active { background: #ccc; }
 
-        /* Specific Button Colors */
+        .btn-pause {
+            padding: 5px 10px; font-size: 14px; cursor: pointer;
+            background: #ddd; border: 1px solid #999; border-radius: 4px; height: 40px;
+        }
+        .btn-pause:hover { background: #ccc; }
+
+        .game-layout { display: flex; justify-content: center; align-items: flex-start; gap: 30px; position: relative; }
+        .board-container { position: relative; }
+        .paused-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(240, 240, 240, 1);
+            display: flex; justify-content: center; align-items: center;
+            font-size: 30px; font-weight: bold; color: #666;
+            z-index: 10; visibility: hidden;
+        }
+        .paused .grid { opacity: 0; pointer-events: none; }
+        .paused .paused-overlay { visibility: visible; }
+
+        .right-panel { display: flex; flex-direction: column; gap: 10px; width: var(--panel-width); }
+        .mode-row { display: flex; gap: 5px; }
+        .mode-btn { flex: 1; padding: 10px; cursor: pointer; border: 1px solid #999; background: #e0e0e0; font-weight: bold; border-radius: 4px; }
+        .mode-btn.active { background-color: #ccffcc; border-color: #006400; color: #006400; }
+        .numpad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+        .num-btn { padding: var(--btn-padding) 0; font-size: var(--btn-font); font-weight: bold; cursor: pointer; background: white; border: 1px solid #999; border-radius: 4px; transition: opacity 0.3s; }
+        .num-btn:hover { background: #f0f0f0; }
+        .num-btn:active { background: #ccc; }
+        .num-btn.completed { opacity: 0.3; pointer-events: none; background: #ddd; }
+        .btn-delete { width: 100%; padding: 12px; font-size: 16px; background: #ffcccc; border: 1px solid #cc0000; color: #cc0000; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-delete:hover { background: #ffb3b3; }
+        .auto-note-wrapper { font-size: 12px; color: #333; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 5px; }
+        .auto-note-wrapper input { transform: scale(1.2); cursor: pointer; }
+        .note-tools { display: flex; gap: 5px; margin-top: 5px; }
+        .btn-small { flex: 1; padding: 5px; font-size: 12px; cursor: pointer; border: 1px solid #999; background: #ddd; border-radius: 4px; }
+        .btn-small:hover { background: #ccc; }
+        .btn { padding: 8px 15px; font-size: 16px; cursor: pointer; border: 1px solid #999; border-radius: 4px; background: #e0e0e0; height: 40px; display: flex; align-items: center; }
         .btn-new { background: #0082c9; color: white; border: none; }
         .btn-new:hover { background: #006fb0; }
-
-        .btn-note.active {
-            background: #ccffcc; border-color: #006400; color: #006400; font-weight: bold;
-        }
-
+        .btn-restart { background: #ff8c00; color: white; border: none; }
+        .btn-restart:hover { background: #e07b00; }
         .btn-hint { background: #ffd700; border: 1px solid #cfaa00; }
         .btn-hint:hover { background: #ffcc00; }
+        .fine-print { font-size: 10px; margin-left: 5px; font-weight: normal; opacity: 0.8; }
+        select { padding: 8px; font-size: 16px; height: 40px; border-radius: 4px; border: 1px solid #999;}
 
-        /* Fine print text inside buttons */
-        .fine-print {
-            font-size: 10px;
-            margin-top: 2px;
-            font-weight: normal;
-            opacity: 0.8;
-        }
-
-        /* DROPDOWN */
-        select { padding: 8px; font-size: 16px; height: 50px; border-radius: 4px; border: 1px solid #999;}
-
-        /* THE GRID */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(9, 44px);
-            width: fit-content; margin: 20px auto;
-            background: black; gap: 1px; border: 3px solid black;
-        }
-
-        /* CELL WRAPPER */
-        .cell-wrapper {
-            background: white; display: grid; grid-template-areas: "stack";
-            width: 44px; height: 44px; box-sizing: border-box; position: relative;
-        }
-        /* Highlight selected box (Blue) */
-        .cell-wrapper.selected { background-color: #e6f2ff !important; }
-
+        .grid { display: grid; grid-template-columns: repeat(9, var(--cell-size)); background: black; gap: var(--board-gap); border: 3px solid black; }
+        .cell-wrapper { background: white; display: grid; grid-template-areas: "stack"; width: var(--cell-size); height: var(--cell-size); box-sizing: border-box; position: relative; }
         .thick-right { border-right: 2px solid black !important; }
         .thick-bottom { border-bottom: 2px solid black !important; }
 
-        /* LAYER 1: INPUT */
+        /* BOLD INPUT & VAR COLORS */
         .cell-input {
-            grid-area: stack; width: 100%; height: 100%;
-            border: none; outline: none; background: transparent;
-            text-align: center; font-size: 24px; color: black;
-            z-index: 2; cursor: default; margin: 0;
+            grid-area: stack; width: 100%; height: 100%; border: none; outline: none; background: transparent;
+            text-align: center; font-size: var(--font-size); color: black; z-index: 2; cursor: default; margin: 0;
+            font-weight: bold;
         }
         .cell-input.conflict { color: red !important; font-weight: bold; }
+        .cell-input.prefilled { font-weight: 900 !important; color: #000; }
+        .cell-wrapper.prefilled { background-color: #d8d8d8; }
 
-        /* LAYER 2: NOTES */
-        .note-grid {
-            grid-area: stack; width: 100%; height: 100%;
-            display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
-            pointer-events: none; z-index: 1;
-        }
-        .note-num {
-            font-size: 10px; color: #008000; font-weight: bold;
-            display: flex; justify-content: center; align-items: center; visibility: hidden;
-        }
+        .note-grid { grid-area: stack; width: 100%; height: 100%; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); pointer-events: none; z-index: 1; }
+        .note-num { font-size: var(--note-size);
+        color: var(--note-color);
+        font-weight: bold; display: flex; justify-content: center; align-items: center; visibility: hidden; }
+        .note-suppressed { visibility: hidden !important; }
+        .note-match { background-color: #00008b; color: white !important; }
+        .has-value .note-grid { display: none !important; }
+        .notes-hidden .note-grid { display: none !important; }
 
-        /* PRE-FILLED & HINT STYLES */
-        .cell-wrapper.prefilled { background-color: #d0d0d0; }
-        .cell-input.prefilled { font-weight: bold; }
+        /* --- DYNAMIC HIGHLIGHT COLORS --- */
+        .highlight-related { background-color: var(--highlight-related) !important; }
+        .highlight-selected { background-color: var(--highlight-selected) !important; }
+        .highlight-match { background-color: var(--highlight-selected) !important; }
 
-        /* Valid Group Green */
-        .valid-group { background-color: #ccffcc !important; }
-
-        .has-value .note-grid { visibility: hidden; }
-
+        .win-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; visibility: hidden; z-index: 100; }
+        .win-text { font-size: 80px; color: #800080; font-weight: bold; text-shadow: 2px 2px 0px white; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
-    <h1>C++ Sudoku Engine</h1>
+    <div id="winOverlay" class="win-screen">
+        <div class="win-text">YOU WON!</div>
+        <div style="font-size: 24px; color: #333;">Great Job!</div>
+        <div id="finalTime" style="font-size: 20px; color: #666; margin-top: 10px;"></div>
+        <div style="margin-top: 30px; display: flex; gap: 15px;">
+             <button class="btn btn-restart" onclick="restartGame()">Restart</button>
+             <button class="btn btn-new" onclick="newGame()">New Game</button>
+        </div>
+    </div>
 
-    <div class="controls-container">
-        <select id="diff-select">
-            <option value="1">Easy</option>
-            <option value="2">Medium</option>
-            <option value="3">Hard</option>
-            <option value="4">Expert</option>
+    <h1>C++ Sudoku Engine <span style="font-size:12px;color:red;">(v7.1)</span></h1>
+
+    <div class="top-controls">
+        <select id="size-select" onchange="changeSize()">
+            <option value="normal">Normal Size</option>
+            <option value="large">Large</option>
+            <option value="xl">Extra Large</option>
         </select>
 
-        <button class="btn btn-new" onclick="newGame()">
-            Start
-        </button>
+        <select id="diff-select" onchange="checkCustomDiff()">
+            <option value="1">Easy (30)</option>
+            <option value="2">Medium (40)</option>
+            <option value="3" selected>Hard (50)</option>
+            <option value="4">Expert (58)</option>
+            <option value="custom">Custom...</option>
+        </select>
 
-        <button id="noteBtn" class="btn btn-note" onclick="toggleNoteMode()">
-            Notes
-            <span class="fine-print">(Press g)</span>
-        </button>
+        <input type="number" id="customHoles" class="custom-holes-input" placeholder="#" min="10" max="64" value="45">
+
+        <button class="btn btn-new" onclick="newGame()">Start Game</button>
+        <button class="btn btn-restart" onclick="restartGame()">Restart</button>
+
+        <button class="settings-btn" onclick="toggleSettings()" title="Settings">&#9881;</button>
+
+        <div id="settingsDropdown" class="settings-dropdown">
+            <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">Theme Settings</div>
+
+            <div class="settings-row">
+                <span>Row/Col Color:</span>
+                <input type="color" id="pickerRelated" onchange="updateColor('related', this.value)">
+            </div>
+
+            <div class="settings-row">
+                <span>Selected Color:</span>
+                <input type="color" id="pickerSelected" onchange="updateColor('selected', this.value)">
+            </div>
+
+            <div class="settings-row">
+                <span>Note Color:</span>
+                <input type="color" id="pickerNote" onchange="updateColor('note', this.value)">
+            </div>
+
+            <div style="margin-top:10px; text-align:right;">
+                <button class="btn-small" onclick="resetTheme()">Reset</button>
+                <button class="btn-small" onclick="toggleSettings()">Close</button>
+            </div>
+        </div>
 
         <button class="btn btn-hint" onclick="getHint()">
-            Hint
-            <span class="fine-print">Get Answer</span>
+            Hint <span class="fine-print">(Answer)</span>
         </button>
+
+        <div class="timer-container">
+            <div id="timerDisplay" class="timer-display">00:00</div>
+            <button id="btnPause" class="btn-pause" onclick="togglePause()">Pause</button>
+        </div>
     </div>
 
-    <div style="font-size: 12px; color: #666; margin-bottom: 5px;">
-        (Press 'x' to clear notes in a box)
-    </div>
+    <div class="game-layout">
+        <div class="board-container" id="boardContainer">
+            <div class="paused-overlay">GAME PAUSED</div>
+            <div id="board" class="grid"></div>
+        </div>
 
-    <div id="board" class="grid"></div>
+        <div class="right-panel">
+            <div class="mode-row">
+                <button id="btnNormal" class="mode-btn active" onclick="setMode('normal')">Normal</button>
+                <button id="btnNotes" class="mode-btn" onclick="setMode('notes')">Notes</button>
+            </div>
+            <div class="numpad-grid">
+                <button id="btn-num-1" class="num-btn" onclick="pressNum('1')">1</button>
+                <button id="btn-num-2" class="num-btn" onclick="pressNum('2')">2</button>
+                <button id="btn-num-3" class="num-btn" onclick="pressNum('3')">3</button>
+                <button id="btn-num-4" class="num-btn" onclick="pressNum('4')">4</button>
+                <button id="btn-num-5" class="num-btn" onclick="pressNum('5')">5</button>
+                <button id="btn-num-6" class="num-btn" onclick="pressNum('6')">6</button>
+                <button id="btn-num-7" class="num-btn" onclick="pressNum('7')">7</button>
+                <button id="btn-num-8" class="num-btn" onclick="pressNum('8')">8</button>
+                <button id="btn-num-9" class="num-btn" onclick="pressNum('9')">9</button>
+            </div>
+            <button class="btn-delete" onclick="pressDelete()">Delete</button>
+            <div class="auto-note-wrapper">
+                <input type="checkbox" id="autoNoteCheck" onchange="fillCandidates()">
+                <label for="autoNoteCheck">Auto Note Mode</label>
+            </div>
+            <div class="note-tools">
+                <button id="btnSaveNotes" class="btn-small" onclick="manualSaveNotes()">Save Notes</button>
+                <button id="btnRestoreNotes" class="btn-small" onclick="restoreNotes()">Restore</button>
+            </div>
+            <div class="auto-note-wrapper">
+                <input type="checkbox" id="autoSaveCheck">
+                <label for="autoSaveCheck" style="font-size: 11px;">Auto-Save Changes</label>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // GLOBAL VARIABLES
         let isNoteMode = false;
-        let currentSolution = ""; // Stores the answer key
-        let selectedCellIndex = -1; // Tracks which box you clicked last
+        let currentSolution = "";
+        let originalPuzzle = "";
+        let selectedCellIndex = -1;
+        let timerSeconds = 0;
+        let timerInterval = null;
+        let isGameActive = false;
+        let isPaused = false;
+        let savedNoteState = [];
+
+        // --- SETTINGS & COLORS ---
+        function toggleSettings() {
+            let el = document.getElementById('settingsDropdown');
+            el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+        }
+
+        function updateColor(type, color) {
+            let root = document.documentElement;
+            if(type === 'related') {
+                root.style.setProperty('--highlight-related', color);
+                localStorage.setItem('sudoku-color-related', color);
+            } else if(type === 'selected') {
+                root.style.setProperty('--highlight-selected', color);
+                localStorage.setItem('sudoku-color-selected', color);
+            }else if(type === 'note') {
+                root.style.setProperty('--note-color', color);
+                localStorage.setItem('sudoku-color-note', color);
+            }
+        }
+
+        function loadTheme() {
+            let savedRelated = localStorage.getItem('sudoku-color-related');
+            let savedSelected = localStorage.getItem('sudoku-color-selected');
+            let savedNote = localStorage.getItem('sudoku-color-note');
+
+            if(savedRelated) {
+                document.documentElement.style.setProperty('--highlight-related', savedRelated);
+                document.getElementById('pickerRelated').value = savedRelated;
+            } else {
+                // Set picker to default CSS value if no save
+                document.getElementById('pickerRelated').value = "#cce5ff";
+            }
+
+            if(savedSelected) {
+                document.documentElement.style.setProperty('--highlight-selected', savedSelected);
+                document.getElementById('pickerSelected').value = savedSelected;
+            } else {
+                document.getElementById('pickerSelected').value = "#80bfff";
+            }
+            if(savedNote) {
+                document.documentElement.style.setProperty('--note-color', savedNote);
+                document.getElementById('pickerNote').value = savedNote;
+            } else {
+                document.getElementById('pickerNote').value = "#008000";
+            }
+        }
+
+        function resetTheme() {
+            updateColor('related', '#cce5ff');
+            updateColor('selected', '#80bfff');
+            updateColor('note', '#008000');
+
+            document.getElementById('pickerNote').value = "#008000";
+            document.getElementById('pickerRelated').value = "#cce5ff";
+            document.getElementById('pickerSelected').value = "#80bfff";
+        }
+
+        // Call loadTheme immediately
+        loadTheme();
+
+        // --- EXISTING LOGIC ---
+        function checkCustomDiff() {
+            let val = document.getElementById('diff-select').value;
+            let input = document.getElementById('customHoles');
+            if(val === 'custom') {
+                input.style.display = 'block';
+            } else {
+                input.style.display = 'none';
+            }
+        }
+
+        function changeSize() {
+            let size = document.getElementById('size-select').value;
+            let root = document.documentElement;
+
+            if(size === 'normal') {
+                root.style.setProperty('--cell-size', '44px');
+                root.style.setProperty('--font-size', '24px');
+                root.style.setProperty('--note-size', '10px');
+                root.style.setProperty('--panel-width', '160px');
+                root.style.setProperty('--btn-padding', '15px');
+                root.style.setProperty('--btn-font', '20px');
+            } else if(size === 'large') {
+                root.style.setProperty('--cell-size', '54px');
+                root.style.setProperty('--font-size', '30px');
+                root.style.setProperty('--note-size', '12px');
+                root.style.setProperty('--panel-width', '200px');
+                root.style.setProperty('--btn-padding', '20px');
+                root.style.setProperty('--btn-font', '24px');
+            } else if(size === 'xl') {
+                root.style.setProperty('--cell-size', '64px');
+                root.style.setProperty('--font-size', '36px');
+                root.style.setProperty('--note-size', '14px');
+                root.style.setProperty('--panel-width', '240px');
+                root.style.setProperty('--btn-padding', '25px');
+                root.style.setProperty('--btn-font', '28px');
+            }
+        }
+
+        function togglePause() {
+            if(!isGameActive && !isPaused) return;
+            let btn = document.getElementById('btnPause');
+            let container = document.getElementById('boardContainer');
+            if(isPaused) {
+                isPaused = false;
+                btn.innerText = "Pause";
+                container.classList.remove('paused');
+                startTimer(false);
+            } else {
+                isPaused = true;
+                btn.innerText = "Resume";
+                container.classList.add('paused');
+                stopTimer();
+            }
+        }
+
+        function startTimer(reset = true) {
+            stopTimer();
+            if(reset) timerSeconds = 0;
+            updateTimerDisplay();
+            isGameActive = true;
+            timerInterval = setInterval(() => {
+                if (document.visibilityState === 'visible') {
+                    timerSeconds++;
+                    updateTimerDisplay();
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if(timerInterval) clearInterval(timerInterval);
+            isGameActive = false;
+        }
+
+        function updateTimerDisplay() {
+            let m = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+            let s = (timerSeconds % 60).toString().padStart(2, '0');
+            document.getElementById('timerDisplay').innerText = `${m}:${s}`;
+        }
+
+        function saveNotes(isManual = false) {
+            savedNoteState = [];
+            document.querySelectorAll('.cell-wrapper').forEach(wrapper => {
+                let cellNotes = [];
+                for(let n=1; n<=9; n++) {
+                    let note = wrapper.querySelector('.note-'+n);
+                    cellNotes.push(note.style.visibility === 'visible');
+                }
+                savedNoteState.push(cellNotes);
+            });
+            if(isManual) {
+                let btn = document.getElementById('btnSaveNotes');
+                let originalText = btn.innerText;
+                btn.innerText = "Saved!";
+                setTimeout(() => btn.innerText = originalText, 1000);
+            }
+        }
+
+        function manualSaveNotes() { saveNotes(true); }
+
+        function restoreNotes() {
+            if(savedNoteState.length === 0) return;
+            document.getElementById('autoNoteCheck').checked = false;
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+            wrappers.forEach((wrapper, i) => {
+                let cellNotes = savedNoteState[i];
+                for(let n=1; n<=9; n++) {
+                    let note = wrapper.querySelector('.note-'+n);
+                    if(cellNotes[n-1]) note.style.visibility = 'visible';
+                    else note.style.visibility = 'hidden';
+                }
+            });
+            suppressNotes();
+        }
+
+        function suppressNotes() {
+            Array.from(document.querySelectorAll('.note-suppressed')).forEach(el => el.classList.remove('note-suppressed'));
+            let inputs = document.querySelectorAll('.cell-input');
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+            for (let i = 0; i < 81; i++) {
+                let val = inputs[i].value;
+                if (val >= '1' && val <= '9') {
+                    let r = Math.floor(i / 9); let c = i % 9;
+                    let startR = r - (r % 3); let startC = c - (c % 3);
+                    let peers = [];
+                    for(let k=0; k<9; k++) peers.push(r*9 + k);
+                    for(let k=0; k<9; k++) peers.push(k*9 + c);
+                    for(let rr=0; rr<3; rr++) for(let cc=0; cc<3; cc++) peers.push((startR+rr)*9 + (startC+cc));
+                    peers.forEach(idx => {
+                        if (idx !== i) {
+                            let note = wrappers[idx].querySelector('.note-' + val);
+                            if(note) note.classList.add('note-suppressed');
+                        }
+                    });
+                }
+            }
+        }
+
+        function updateNumpadStatus() {
+            let inputs = document.querySelectorAll('.cell-input');
+            let counts = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, 8:0, 9:0};
+            Array.from(inputs).forEach(input => {
+                if(input.value >= '1' && input.value <= '9') counts[input.value]++;
+            });
+            for(let n=1; n<=9; n++) {
+                let btn = document.getElementById('btn-num-' + n);
+                if(counts[n] >= 9) btn.classList.add('completed');
+                else btn.classList.remove('completed');
+            }
+        }
+
+        function setMode(mode) {
+            const btnNorm = document.getElementById('btnNormal');
+            const btnNote = document.getElementById('btnNotes');
+            if (mode === 'notes') {
+                isNoteMode = true;
+                btnNote.classList.add('active');
+                btnNorm.classList.remove('active');
+            } else {
+                isNoteMode = false;
+                btnNorm.classList.add('active');
+                btnNote.classList.remove('active');
+            }
+            refocus();
+        }
+
+        function fillCandidates() {
+            const isChecked = document.getElementById('autoNoteCheck').checked;
+            if (!isChecked) return;
+            let inputs = document.querySelectorAll('.cell-input');
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+            const getTaken = (indices) => {
+                let taken = new Set();
+                indices.forEach(idx => {
+                    let val = inputs[idx].value;
+                    if(val) taken.add(val);
+                });
+                return taken;
+            };
+            for(let i=0; i<81; i++) {
+                if(inputs[i].value !== "") continue;
+                let r = Math.floor(i/9); let c = i%9;
+                let startR = r - (r%3); let startC = c - (c%3);
+                let peers = [];
+                for(let k=0; k<9; k++) peers.push(r*9 + k);
+                for(let k=0; k<9; k++) peers.push(k*9 + c);
+                for(let rr=0; rr<3; rr++) for(let cc=0; cc<3; cc++) peers.push((startR+rr)*9 + (startC+cc));
+                let taken = getTaken(peers);
+                let wrapper = wrappers[i];
+                for(let n=1; n<=9; n++) {
+                    let note = wrapper.querySelector('.note-' + n);
+                    if(!taken.has(n.toString())) note.style.visibility = 'visible';
+                }
+            }
+        }
 
         function toggleNoteMode() {
-            isNoteMode = !isNoteMode;
-            const btn = document.getElementById('noteBtn');
-            if (isNoteMode) btn.classList.add('active');
-            else btn.classList.remove('active');
+            setMode(isNoteMode ? 'normal' : 'notes');
+        }
+
+        function pressNum(num) {
+            if(isPaused) return;
+            if (selectedCellIndex === -1) return;
+            let inputs = document.querySelectorAll('.cell-input');
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+            let input = inputs[selectedCellIndex];
+            let wrapper = wrappers[selectedCellIndex];
+            if(input.readOnly) return;
+            let fakeEvent = { key: num, preventDefault: () => {} };
+            handleInput(fakeEvent, input, wrapper);
+            refocus();
+        }
+
+        function pressDelete() {
+            if(isPaused) return;
+            if (selectedCellIndex === -1) return;
+            let inputs = document.querySelectorAll('.cell-input');
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+            let input = inputs[selectedCellIndex];
+            let wrapper = wrappers[selectedCellIndex];
+            if(input.readOnly) return;
+            let fakeEvent = { key: 'Backspace', preventDefault: () => {} };
+            handleInput(fakeEvent, input, wrapper);
+            refocus();
+        }
+
+        function refocus() {
+            if (selectedCellIndex !== -1) {
+                document.querySelectorAll('.cell-input')[selectedCellIndex].focus();
+            }
         }
 
         document.addEventListener('keydown', (e) => {
+            if(isPaused) return;
             if (e.key === 'g' || e.key === 'G') {
                 if (e.target.tagName === 'INPUT') e.preventDefault();
                 toggleNoteMode();
             }
         });
 
+        function restartGame() {
+            if (!originalPuzzle) return;
+            document.getElementById('winOverlay').style.visibility = 'hidden';
+            document.getElementById('autoNoteCheck').checked = false;
+            document.getElementById('autoSaveCheck').checked = false;
+            if(isPaused) togglePause();
+            startTimer();
+            drawBoard(originalPuzzle);
+            selectedCellIndex = -1;
+            updateNumpadStatus();
+            suppressNotes();
+            saveNotes();
+        }
+
         function newGame() {
-            let level = document.getElementById('diff-select').value;
-            fetch('api.php?level=' + level)
+            document.getElementById('winOverlay').style.visibility = 'hidden';
+            document.getElementById('autoNoteCheck').checked = false;
+            document.getElementById('autoSaveCheck').checked = false;
+            if(isPaused) togglePause();
+
+            let diffVal = document.getElementById('diff-select').value;
+            let url = 'api.php?level=' + diffVal;
+            if (diffVal === 'custom') {
+                let holes = document.getElementById('customHoles').value;
+                url += '&holes=' + holes;
+            }
+
+            startTimer();
+            fetch(url)
                 .then(response => response.text())
                 .then(data => {
-                    // C++ now returns "PUZZLE SOLUTION" separated by a space
                     let parts = data.trim().split(" ");
-                    let puzzle = parts[0];
-                    currentSolution = parts[1]; // Save the answer key
-
-                    selectedCellIndex = -1; // Reset selection
-                    drawBoard(puzzle);
+                    originalPuzzle = parts[0];
+                    currentSolution = parts[1];
+                    drawBoard(originalPuzzle);
+                    selectedCellIndex = -1;
+                    updateNumpadStatus();
+                    suppressNotes();
+                    saveNotes();
                 });
         }
 
-        // --- NEW HINT FUNCTION ---
         function getHint() {
+            if(isPaused) return;
             if (selectedCellIndex === -1) {
                 alert("Please click on a box first to get a hint!");
                 return;
             }
-
-            // Check if it's already filled
             let inputs = document.querySelectorAll('.cell-input');
-            if (inputs[selectedCellIndex].value !== "") return; // Already done
-
-            // Get the correct answer from our secret variable
+            if (inputs[selectedCellIndex].value !== "") return;
             let correctChar = currentSolution[selectedCellIndex];
-
-            // Fill it in
-            let input = inputs[selectedCellIndex];
             let wrapper = document.querySelectorAll('.cell-wrapper')[selectedCellIndex];
-
-            input.value = correctChar;
+            inputs[selectedCellIndex].value = correctChar;
             wrapper.classList.add('has-value');
-
-            // Optional: You could add a specific color for hints if you want
-            // wrapper.style.backgroundColor = "#fffacd";
-
-            checkBoard(); // Run logic check
+            checkBoard();
+            highlightBoard(selectedCellIndex);
         }
 
         function drawBoard(boardString) {
             const boardDiv = document.getElementById('board');
             boardDiv.innerHTML = '';
-
             for (let i = 0; i < 81; i++) {
                 let wrapper = document.createElement('div');
                 wrapper.className = 'cell-wrapper';
@@ -215,13 +630,10 @@
                 input.className = 'cell-input';
                 input.maxLength = 1;
 
-                // Track selection when user clicks a box
                 input.onfocus = () => {
-                    // Remove old selection highlights
-                    document.querySelectorAll('.cell-wrapper').forEach(w => w.classList.remove('selected'));
-                    // Add new highlight
-                    wrapper.classList.add('selected');
+                    if(isPaused) return;
                     selectedCellIndex = i;
+                    highlightBoard(i);
                 };
 
                 let noteGrid = document.createElement('div');
@@ -240,108 +652,133 @@
                     wrapper.classList.add('has-value');
                 } else {
                     input.onkeydown = (e) => handleInput(e, input, wrapper);
-                    input.oninput = () => checkBoard();
                 }
-
                 wrapper.appendChild(input); wrapper.appendChild(noteGrid);
                 boardDiv.appendChild(wrapper);
             }
         }
 
+        function highlightBoard(idx) {
+            if(isPaused) return;
+            let wrappers = document.querySelectorAll('.cell-wrapper');
+            let inputs = document.querySelectorAll('.cell-input');
+            wrappers.forEach(w => {
+                w.classList.remove('highlight-related');
+                w.classList.remove('highlight-selected');
+                w.classList.remove('highlight-match');
+            });
+            document.querySelectorAll('.note-match').forEach(n => n.classList.remove('note-match'));
+            if(idx === -1) return;
+            let r = Math.floor(idx / 9); let c = idx % 9;
+            let startR = r - (r % 3); let startC = c - (c % 3);
+            let currentValue = inputs[idx].value;
+            for (let i = 0; i < 81; i++) {
+                let ir = Math.floor(i / 9); let ic = i % 9;
+                let inRow = (ir === r); let inCol = (ic === c);
+                let inBlock = (ir >= startR && ir < startR + 3 && ic >= startC && ic < startC + 3);
+                if (inRow || inCol || inBlock) wrappers[i].classList.add('highlight-related');
+                if (currentValue !== "" && inputs[i].value === currentValue) wrappers[i].classList.add('highlight-match');
+            }
+            wrappers[idx].classList.remove('highlight-related');
+            wrappers[idx].classList.add('highlight-selected');
+            if (currentValue >= '1' && currentValue <= '9') {
+                let matchingNotes = document.querySelectorAll('.note-' + currentValue);
+                Array.from(matchingNotes).forEach(note => {
+                    if (!note.classList.contains('note-suppressed')) {
+                        note.classList.add('note-match');
+                    }
+                });
+            }
+        }
+
         function handleInput(e, input, wrapper) {
+            if(isPaused) return;
             if (e.key === 'x' || e.key === 'X') {
                 e.preventDefault();
-                wrapper.querySelectorAll('.note-num').forEach(n => n.style.visibility = 'hidden');
+                if(wrapper.classList.contains('notes-hidden')) wrapper.classList.remove('notes-hidden');
+                else wrapper.classList.add('notes-hidden');
                 return;
             }
             if (e.key === 'g' || e.key === 'G') { e.preventDefault(); return; }
 
             if (e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
                 if (isNoteMode) {
-                    e.preventDefault();
+                    wrapper.classList.remove('notes-hidden');
                     let note = wrapper.querySelector('.note-' + e.key);
                     note.style.visibility = (note.style.visibility === 'visible') ? 'hidden' : 'visible';
+                    if(document.getElementById('autoSaveCheck').checked) saveNotes();
                 } else {
+                    wrapper.classList.remove('notes-hidden');
+                    input.value = e.key;
                     wrapper.classList.add('has-value');
+                    checkBoard();
+                    highlightBoard(selectedCellIndex);
                 }
             }
-
             if (e.key === 'Backspace' || e.key === 'Delete') {
                 if (!isNoteMode) {
-                    setTimeout(() => {
-                        if(input.value === '') {
-                             wrapper.classList.remove('has-value');
-                             checkBoard();
-                        }
-                    }, 10);
+                    e.preventDefault();
+                    input.value = '';
+                    wrapper.classList.remove('has-value');
+                    checkBoard();
+                    highlightBoard(selectedCellIndex);
                 }
             }
         }
 
         function checkBoard() {
-            let inputs = document.querySelectorAll('.cell-input');
-            let wrappers = document.querySelectorAll('.cell-wrapper');
-
-            wrappers.forEach(w => w.classList.remove('valid-group'));
-            inputs.forEach(i => i.classList.remove('conflict'));
-
-            const getVal = (idx) => inputs[idx].value;
-
-            const analyzeGroup = (indices) => {
-                let values = indices.map(idx => getVal(idx));
-                let counts = {};
-                indices.forEach(idx => {
-                    let val = getVal(idx);
-                    if(val !== "") {
-                        if(!counts[val]) counts[val] = [];
-                        counts[val].push(idx);
+            try {
+                suppressNotes();
+                updateNumpadStatus();
+                let inputs = document.querySelectorAll('.cell-input');
+                Array.from(inputs).forEach(i => i.classList.remove('conflict'));
+                const getVal = (idx) => inputs[idx].value;
+                let totalValidGroups = 0;
+                const analyzeGroup = (indices) => {
+                    let values = indices.map(idx => getVal(idx));
+                    let counts = {};
+                    indices.forEach(idx => {
+                        let val = getVal(idx);
+                        if(val !== "") {
+                            if(!counts[val]) counts[val] = [];
+                            counts[val].push(idx);
+                        }
+                    });
+                    for (let num in counts) {
+                        if (counts[num].length > 1) {
+                            counts[num].forEach(idx => inputs[idx].classList.add('conflict'));
+                        }
                     }
-                });
-                for (let num in counts) {
-                    if (counts[num].length > 1) {
-                        counts[num].forEach(idx => inputs[idx].classList.add('conflict'));
-                    }
-                }
-                let unique = new Set(values);
-                if (!values.includes("") && unique.size === 9) {
-                    indices.forEach(idx => wrappers[idx].classList.add('valid-group'));
-                }
-            };
-
-            for (let r = 0; r < 9; r++) {
-                let indices = [];
-                for (let c = 0; c < 9; c++) indices.push(r*9 + c);
-                analyzeGroup(indices);
-            }
-            for (let c = 0; c < 9; c++) {
-                let indices = [];
-                for (let r = 0; r < 9; r++) indices.push(r*9 + c);
-                analyzeGroup(indices);
-            }
-            for (let br = 0; br < 9; br+=3) {
-                for (let bc = 0; bc < 9; bc+=3) {
+                    let unique = new Set(values);
+                    if (!values.includes("") && unique.size === 9) totalValidGroups++;
+                };
+                for (let r = 0; r < 9; r++) {
                     let indices = [];
-                    for (let i=0; i<3; i++) for(let j=0; j<3; j++) indices.push((br+i)*9 + (bc+j));
+                    for (let c = 0; c < 9; c++) indices.push(r*9 + c);
                     analyzeGroup(indices);
                 }
-            }
+                for (let c = 0; c < 9; c++) {
+                    let indices = [];
+                    for (let r = 0; r < 9; r++) indices.push(r*9 + c);
+                    analyzeGroup(indices);
+                }
+                for (let br = 0; br < 9; br+=3) {
+                    for (let bc = 0; bc < 9; bc+=3) {
+                        let indices = [];
+                        for (let i=0; i<3; i++) for(let j=0; j<3; j++) indices.push((br+i)*9 + (bc+j));
+                        analyzeGroup(indices);
+                    }
+                }
+                if (totalValidGroups === 27) {
+                    stopTimer();
+                    let m = Math.floor(timerSeconds / 60).toString().padStart(2, '0');
+                    let s = (timerSeconds % 60).toString().padStart(2, '0');
+                    document.getElementById('finalTime').innerText = `Time: ${m}:${s}`;
+                    document.getElementById('winOverlay').style.visibility = 'visible';
+                }
+            } catch(e) { console.error(e); }
         }
-
-        function toggleNoteMode() {
-            isNoteMode = !isNoteMode;
-            const btn = document.getElementById('noteBtn');
-
-            // 1. Change the visual style
-            if (isNoteMode) btn.classList.add('active');
-            else btn.classList.remove('active');
-
-            // 2. THE FIX: If we have a selected box, force the browser to focus on it again
-            if (selectedCellIndex !== -1) {
-                let inputs = document.querySelectorAll('.cell-input');
-                inputs[selectedCellIndex].focus();
-            }
-        }
-
         newGame();
     </script>
 </body>

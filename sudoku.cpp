@@ -2,47 +2,45 @@
 #include <vector>
 #include <algorithm>
 #include <random>
-#include <ctime>
-#include <cstdlib> // Needed for atoi (text to number)
+#include <chrono>
+#include <cstdlib>
 
 using namespace std;
 
-// A standard 9x9 grid
-int grid[9][9] = {0};
-int solution[9][9] = {0}; // New: To store the answer key
+const int N = 9;
+const int EMPTY = 0;
 
-// Check if placing num at (row, col) is valid
-bool isValid(int row, int col, int num) {
-    for (int i = 0; i < 9; i++) {
-        if (grid[row][i] == num || grid[i][col] == num) return false;
+void printBoard(const vector<vector<int>>& board) {
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            cout << board[i][j];
+        }
     }
-    // Check 3x3 box
+}
+
+bool isValid(const vector<vector<int>>& board, int row, int col, int num) {
+    for (int i = 0; i < N; ++i) {
+        if (board[row][i] == num || board[i][col] == num) return false;
+    }
     int startRow = row - row % 3;
     int startCol = col - col % 3;
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            if (grid[i + startRow][j + startCol] == num) return false;
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            if (board[i + startRow][j + startCol] == num) return false;
         }
     }
     return true;
 }
 
-// Simple Backtracking Solver to fill the board
-bool fillBoard() {
-    for (int row = 0; row < 9; row++) {
-        for (int col = 0; col < 9; col++) {
-            if (grid[row][col] == 0) {
-                vector<int> nums = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-                // Shuffle to make it random every time!
-                random_device rd;
-                mt19937 g(rd());
-                shuffle(nums.begin(), nums.end(), g);
-
-                for (int num : nums) {
-                    if (isValid(row, col, num)) {
-                        grid[row][col] = num;
-                        if (fillBoard()) return true;
-                        grid[row][col] = 0;
+bool solveSudoku(vector<vector<int>>& board) {
+    for (int row = 0; row < N; ++row) {
+        for (int col = 0; col < N; ++col) {
+            if (board[row][col] == EMPTY) {
+                for (int num = 1; num <= 9; ++num) {
+                    if (isValid(board, row, col, num)) {
+                        board[row][col] = num;
+                        if (solveSudoku(board)) return true;
+                        board[row][col] = EMPTY;
                     }
                 }
                 return false;
@@ -52,60 +50,71 @@ bool fillBoard() {
     return true;
 }
 
+void fillDiagonal(vector<vector<int>>& board) {
+    for (int i = 0; i < N; i += 3) {
+        vector<int> nums = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        shuffle(nums.begin(), nums.end(), default_random_engine(seed));
+        int idx = 0;
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c) {
+                board[i + r][i + c] = nums[idx++];
+            }
+        }
+    }
+}
+
+void removeDigits(vector<vector<int>>& board, int holes) {
+    int count = holes;
+    while (count > 0) {
+        int cellId = rand() % (N * N);
+        int i = cellId / N;
+        int j = cellId % N;
+        if (board[i][j] != EMPTY) {
+            board[i][j] = EMPTY;
+            count--;
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
     srand(time(0));
+    vector<vector<int>> board(N, vector<int>(N, EMPTY));
+    fillDiagonal(board);
+    solveSudoku(board);
 
-    // 1. Determine Difficulty
-    // Default to Easy (30 holes) if no argument is given
-    int holes = 30;
+    // Save the full solution
+    vector<vector<int>> solution = board;
 
+    // Difficulty Logic (The New Update)
+    int level = 3; // Default to Hard
     if (argc > 1) {
-        int level = atoi(argv[1]); // Convert text "2" to number 2
+        level = atoi(argv[1]);
+    }
 
-        switch(level) {
+    int holes;
+    if (level > 10) {
+        // Custom Mode: If input is > 10, use it as the exact hole count
+        holes = level;
+        // Cap it safely between 10 (Too Easy) and 64 (Insane)
+        if (holes > 64) holes = 64;
+        if (holes < 10) holes = 10;
+    } else {
+        // Standard Modes
+        switch (level) {
             case 1: holes = 30; break; // Easy
             case 2: holes = 40; break; // Medium
             case 3: holes = 50; break; // Hard
             case 4: holes = 58; break; // Expert
-            default: holes = 30;
+            default: holes = 50;
         }
     }
 
-    // 2. Generate Board
-    fillBoard();
+    removeDigits(board, holes);
 
-    // 3. SAVE THE SOLUTION BEFORE WE POKE HOLES!
-    for(int i=0; i<9; i++) {
-        for(int j=0; j<9; j++) {
-            solution[i][j] = grid[i][j];
-        }
-    }
-
-    // 4. Remove Numbers (poke holes)
-    for(int i = 0; i < holes; i++) {
-        int r = rand() % 9;
-        int c = rand() % 9;
-        // If it's already 0, find another spot
-        while(grid[r][c] == 0) {
-             r = rand() % 9;
-             c = rand() % 9;
-        }
-        grid[r][c] = 0;
-    }
-
-    // 5. Output
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            cout << grid[i][j];
-        }
-    }
-
-    cout << " "; // The separator
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            cout << solution[i][j];
-        }
-    }
+    printBoard(board);
+    cout << " "; // Separator
+    printBoard(solution);
 
     return 0;
 }

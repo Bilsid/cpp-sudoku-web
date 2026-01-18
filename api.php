@@ -1,12 +1,22 @@
 <?php
-header("Cache-Control: no-cache, no-store, must-revalidate");
+// Get the level (1-4) OR the custom number (e.g., 45)
+$level_input = isset($_GET['level']) ? $_GET['level'] : 3;
 
-// Get level from URL (default to 1 if missing)
-$level = isset($_GET['level']) ? intval($_GET['level']) : 1;
+// If they passed "custom", check for the 'holes' parameter
+if ($level_input == 'custom') {
+    $holes = isset($_GET['holes']) ? intval($_GET['holes']) : 50;
+    // Pass the raw number (e.g., 55) directly to C++
+    $arg = $holes;
+} else {
+    // Normal 1-4 levels
+    $arg = intval($level_input);
+}
 
-// Pass the level to the C++ program
-// Example command: ./sudoku_gen 3
-$boardData = shell_exec("./sudoku_gen $level");
+// Security Check: Ensure input is just a number
+if (!is_numeric($arg)) { $arg = 3; }
 
-echo $boardData;
+// Execute C++
+$command = "./sudoku_gen " . $arg;
+$output = shell_exec($command);
+echo $output;
 ?>
